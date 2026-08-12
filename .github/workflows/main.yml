@@ -163,7 +163,7 @@ jobs:
 
           LIB="$(find build -type f -name 'xmrig' -print -quit)"
 
-          # کپی فایل اجرا و تغییر نام آن به libxmrig.so جهت قرارگیری در jniLibs اندروید
+          # کپی فایل اجرایی و تغییر نام به libxmrig.so جهت قرارگیری در jniLibs
           cp "$LIB" "output/${{ matrix.abi }}/libxmrig.so"
 
           echo "Final output file info:"
