@@ -118,11 +118,11 @@ jobs:
         run: |
           set -euxo pipefail
 
-          # 1. رفع باگ نام‌گذاری -notls
+          # 1. رفع باگ -notls
           sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
           sed -i 's/TARGET ${PROJECT_NAME}/TARGET ${CMAKE_PROJECT_NAME}/g' CMakeLists.txt
 
-          # 2. حذف پرچم‌های -lpthread و -lrt به دلیل تعبیه بودن در libc اندروید
+          # 2. حذف پرچم‌های -lpthread و -lrt
           sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} rt)//g' CMakeLists.txt
           sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} pthread)//g' CMakeLists.txt
           sed -i 's/\brt\b//g' CMakeLists.txt
@@ -133,13 +133,14 @@ jobs:
 
           cd build
 
+          # استفاده از c++_static برای مستقل شدن کامل فایل خروجی
           cmake .. \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI="${{ matrix.abi }}" \
             -DANDROID_PLATFORM=android-24 \
-            -DANDROID_STL=c++_shared \
+            -DANDROID_STL=c++_static \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -DCMAKE_THREAD_LIBS_INIT="" \
             -DCMAKE_HAVE_LIBC_PTHREAD=ON \
@@ -175,7 +176,6 @@ jobs:
 
           LIB="$(find build -type f -name 'xmrig' -print -quit)"
 
-          # کپی فایل اجرایی و تغییر نام به libxmrig.so جهت قرارگیری در jniLibs
           cp "$LIB" "output/${{ matrix.abi }}/libxmrig.so"
 
           echo "Final output file info:"
