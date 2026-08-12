@@ -1,4 +1,4 @@
-name: Build XMRig 6.26.0 - Android
+name: Build XMRig 6.26.0 - Android (Zero Fee)
 
 on:
   workflow_dispatch:
@@ -118,11 +118,15 @@ jobs:
         run: |
           set -euxo pipefail
 
-          # 1. رفع باگ -notls
+          # ۱. صفر کردن کامل دونیت و کارمزد توسعه‌دهنده (0% Dev Fee)
+          sed -i 's/constexpr const int kDefaultDonateLevel = 1;/constexpr const int kDefaultDonateLevel = 0;/g' src/donate.h
+          sed -i 's/constexpr const int kMinimumDonateLevel = 1;/constexpr const int kMinimumDonateLevel = 0;/g' src/donate.h
+
+          # ۲. رفع باگ -notls
           sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
           sed -i 's/TARGET ${PROJECT_NAME}/TARGET ${CMAKE_PROJECT_NAME}/g' CMakeLists.txt
 
-          # 2. حذف پرچم‌های -lpthread و -lrt
+          # ۳. حذف پرچم‌های -lpthread و -lrt
           sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} rt)//g' CMakeLists.txt
           sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} pthread)//g' CMakeLists.txt
           sed -i 's/\brt\b//g' CMakeLists.txt
@@ -133,7 +137,6 @@ jobs:
 
           cd build
 
-          # استفاده از c++_static برای مستقل شدن کامل فایل خروجی
           cmake .. \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
