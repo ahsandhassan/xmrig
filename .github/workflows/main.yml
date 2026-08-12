@@ -14,21 +14,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        abi:
-          - armeabi-v7a
-          - arm64-v8a
-          - x86
-          - x86_64
+        include:
+          - abi: armeabi-v7a
+            arch: arm
+            uv_arch: arm
+          - abi: arm64-v8a
+            arch: arm64
+            uv_arch: aarch64
+          - abi: x86
+            arch: x86
+            uv_arch: x86
+          - abi: x86_64
+            arch: x86_64
+            uv_arch: x86_64
 
     steps:
-      - name: Checkout XMRig v6.26.0
+      - name: Checkout XMRig 6.26.0
         uses: actions/checkout@v4
         with:
           repository: xmrig/xmrig
           ref: b2ca72480c58d197e18c885d9fc1a0c8d517e60a
           fetch-depth: 1
 
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -40,23 +48,71 @@ jobs:
             libtool \
             pkg-config \
             unzip \
-            wget
+            wget \
+            git
 
       - name: Install Android SDK and NDK
         uses: android-actions/setup-android@v3
 
-      - name: Install NDK
+      - name: Install Android NDK
         run: |
           sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+
           echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
-      - name: Configure
+      - name: Build libuv for Android
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          git clone --depth 1 --branch v1.49.2 https://github.com/libuv/libuv.git libuv
+
+          cd libuv
+
+          sh autogen.sh
+
+          case "${{ matrix.abi }}" in
+            armeabi-v7a)
+              HOST="arm-linux-androideabi"
+              ;;
+            arm64-v8a)
+              HOST="aarch64-linux-android"
+              ;;
+            x86)
+              HOST="i686-linux-android"
+              ;;
+            x86_64)
+              HOST="x86_64-linux-android"
+              ;;
+          esac
+
+          export TOOLCHAIN="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
+          export API=24
+
+          export CC="$TOOLCHAIN/bin/${HOST}${API}-clang"
+          export CXX="$TOOLCHAIN/bin/${HOST}${API}-clang++"
+          export AR="$TOOLCHAIN/bin/llvm-ar"
+          export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
+          export STRIP="$TOOLCHAIN/bin/llvm-strip"
+
+          ./configure \
+            --host="$HOST" \
+            --prefix="$GITHUB_WORKSPACE/libuv/install"
+
+          make -j2
+          make install
+
+          echo "UV_LIBRARY=$GITHUB_WORKSPACE/libuv/install/lib/libuv.a" >> "$GITHUB_ENV"
+          echo "UV_INCLUDE_DIR=$GITHUB_WORKSPACE/libuv/install/include" >> "$GITHUB_ENV"
+
+      - name: Configure XMRig
         shell: bash
         run: |
           set -euxo pipefail
 
           rm -rf build
           mkdir build
+
           cd build
 
           cmake .. \
@@ -67,23 +123,32 @@ jobs:
             -DANDROID_PLATFORM=android-24 \
             -DANDROID_STL=c++_shared \
             -DBUILD_SHARED_LIBS=ON \
+            -DUV_LIBRARY="$UV_LIBRARY" \
+            -DUV_INCLUDE_DIR="$UV_INCLUDE_DIR" \
             -DWITH_HWLOC=OFF \
             -DWITH_OPENCL=OFF \
             -DWITH_CUDA=OFF
 
-      - name: Build
+      - name: Build XMRig
         run: |
           cmake --build build --parallel 2
 
-      - name: Find libxmrig.so
+      - name: Locate libxmrig.so
         shell: bash
         run: |
           set -euxo pipefail
 
           echo "Searching for libxmrig.so..."
+
           find build -type f -name "libxmrig.so" -print
 
-      - name: Package
+          LIB="$(find build -type f -name 'libxmrig.so' -print -quit)"
+
+          test -n "$LIB"
+
+          file "$LIB"
+
+      - name: Package libxmrig.so
         shell: bash
         run: |
           set -euxo pipefail
@@ -92,16 +157,13 @@ jobs:
 
           LIB="$(find build -type f -name 'libxmrig.so' -print -quit)"
 
-          if [ -z "$LIB" ]; then
-            echo "ERROR: libxmrig.so was not produced."
-            exit 1
-          fi
-
           cp "$LIB" "output/${{ matrix.abi }}/libxmrig.so"
 
+          echo "Final output:"
           file "output/${{ matrix.abi }}/libxmrig.so"
 
           cd output
+
           zip -r "../libxmrig-${{ matrix.abi }}.zip" "${{ matrix.abi }}"
 
       - name: Upload artifact
