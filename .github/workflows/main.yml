@@ -118,6 +118,9 @@ jobs:
         run: |
           set -euxo pipefail
 
+          # رفع باگ نام‌گذاری تارگت XMRig در حالت WITH_TLS=OFF
+          sed -i 's/xmrig-notls/xmrig/g' CMakeLists.txt
+
           rm -rf build
           mkdir build
 
@@ -163,7 +166,7 @@ jobs:
 
           LIB="$(find build -type f -name 'xmrig' -print -quit)"
 
-          # کپی فایل اجرایی و تغییر نام به libxmrig.so جهت قرارگیری در jniLibs
+          # کپی فایل اجرا و تغییر نام به libxmrig.so برای استفاده در jniLibs
           cp "$LIB" "output/${{ matrix.abi }}/libxmrig.so"
 
           echo "Final output file info:"
