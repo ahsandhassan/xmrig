@@ -118,8 +118,9 @@ jobs:
         run: |
           set -euxo pipefail
 
-          # رفع باگ نام‌گذاری تارگت XMRig در حالت WITH_TLS=OFF
-          sed -i 's/xmrig-notls/xmrig/g' CMakeLists.txt
+          # رفع کامل باگ -notls در CMakeLists.txt پروژه XMRig
+          sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
+          sed -i 's/TARGET ${PROJECT_NAME}/TARGET ${CMAKE_PROJECT_NAME}/g' CMakeLists.txt
 
           rm -rf build
           mkdir build
@@ -166,7 +167,7 @@ jobs:
 
           LIB="$(find build -type f -name 'xmrig' -print -quit)"
 
-          # کپی فایل اجرا و تغییر نام به libxmrig.so برای استفاده در jniLibs
+          # کپی فایل اجرا و تغییر نام به libxmrig.so جهت قرارگیری در jniLibs
           cp "$LIB" "output/${{ matrix.abi }}/libxmrig.so"
 
           echo "Final output file info:"
