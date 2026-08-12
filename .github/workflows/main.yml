@@ -118,9 +118,15 @@ jobs:
         run: |
           set -euxo pipefail
 
-          # رفع کامل باگ -notls در CMakeLists.txt پروژه XMRig
+          # 1. رفع باگ نام‌گذاری -notls
           sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
           sed -i 's/TARGET ${PROJECT_NAME}/TARGET ${CMAKE_PROJECT_NAME}/g' CMakeLists.txt
+
+          # 2. حذف پرچم‌های -lpthread و -lrt به دلیل تعبیه بودن در libc اندروید
+          sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} rt)//g' CMakeLists.txt
+          sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} pthread)//g' CMakeLists.txt
+          sed -i 's/\brt\b//g' CMakeLists.txt
+          sed -i 's/\bpthread\b//g' CMakeLists.txt
 
           rm -rf build
           mkdir build
@@ -135,6 +141,8 @@ jobs:
             -DANDROID_PLATFORM=android-24 \
             -DANDROID_STL=c++_shared \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCMAKE_THREAD_LIBS_INIT="" \
+            -DCMAKE_HAVE_LIBC_PTHREAD=ON \
             -DUV_LIBRARY="$UV_LIBRARY" \
             -DUV_INCLUDE_DIR="$UV_INCLUDE_DIR" \
             -DWITH_HWLOC=OFF \
@@ -167,7 +175,7 @@ jobs:
 
           LIB="$(find build -type f -name 'xmrig' -print -quit)"
 
-          # کپی فایل اجرا و تغییر نام به libxmrig.so جهت قرارگیری در jniLibs
+          # کپی فایل اجرایی و تغییر نام به libxmrig.so جهت قرارگیری در jniLibs
           cp "$LIB" "output/${{ matrix.abi }}/libxmrig.so"
 
           echo "Final output file info:"
