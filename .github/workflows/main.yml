@@ -1,0 +1,118 @@
+name: Build XMRig 6.26.0 - Android
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.abi }}
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: armeabi-v7a
+            arch: arm
+            toolchain_arch: arm
+          - abi: arm64-v8a
+            arch: arm64
+            toolchain_arch: aarch64
+          - abi: x86
+            arch: x86
+            toolchain_arch: x86
+          - abi: x86_64
+            arch: x86_64
+            toolchain_arch: x86_64
+
+    steps:
+      - name: Checkout XMRig v6.26.0
+        uses: actions/checkout@v4
+        with:
+          ref: v6.26.0
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            python3 \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            unzip \
+            wget
+
+      - name: Install Android NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_PATH"
+
+      - name: Configure
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          rm -rf build
+          mkdir build
+          cd build
+
+          cmake .. \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI="${{ matrix.abi }}" \
+            -DANDROID_PLATFORM=android-24 \
+            -DANDROID_STL=c++_shared \
+            -DBUILD_SHARED_LIBS=ON \
+            -DWITH_HWLOC=OFF \
+            -DWITH_OPENCL=OFF \
+            -DWITH_CUDA=OFF
+
+      - name: Build
+        run: |
+          cmake --build build --parallel 2
+
+      - name: Locate libxmrig.so
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "Searching for libxmrig.so..."
+
+          find build -type f -name "libxmrig.so" -print
+
+          test -n "$(find build -type f -name 'libxmrig.so' -print -quit)"
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          mkdir -p output/${{ matrix.abi }}
+
+          LIB="$(find build -type f -name 'libxmrig.so' -print -quit)"
+
+          cp "$LIB" "output/${{ matrix.abi }}/libxmrig.so"
+
+          file "output/${{ matrix.abi }}/libxmrig.so"
+
+          cd output
+          zip -r "../libxmrig-${{ matrix.abi }}.zip" "${{ matrix.abi }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libxmrig-${{ matrix.abi }}
+          path: libxmrig-${{ matrix.abi }}.zip
+          if-no-files-found: error
