@@ -14,27 +14,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - abi: armeabi-v7a
-            arch: arm
-            toolchain_arch: arm
-          - abi: arm64-v8a
-            arch: arm64
-            toolchain_arch: aarch64
-          - abi: x86
-            arch: x86
-            toolchain_arch: x86
-          - abi: x86_64
-            arch: x86_64
-            toolchain_arch: x86_64
+        abi:
+          - armeabi-v7a
+          - arm64-v8a
+          - x86
+          - x86_64
 
     steps:
-- name: Checkout XMRig v6.26.0
-  uses: actions/checkout@v4
-  with:
-    repository: xmrig/xmrig
-    ref: b2ca72480c58d197e18c885d9fc1a0c8d517e60a
-    fetch-depth: 1
+      - name: Checkout XMRig v6.26.0
+        uses: actions/checkout@v4
+        with:
+          repository: xmrig/xmrig
+          ref: b2ca72480c58d197e18c885d9fc1a0c8d517e60a
+          fetch-depth: 1
 
       - name: Install build dependencies
         run: |
@@ -50,14 +42,13 @@ jobs:
             unzip \
             wget
 
-      - name: Install Android NDK
+      - name: Install Android SDK and NDK
         uses: android-actions/setup-android@v3
 
       - name: Install NDK
         run: |
           sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
           echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
-          echo "$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_PATH"
 
       - name: Configure
         shell: bash
@@ -84,16 +75,13 @@ jobs:
         run: |
           cmake --build build --parallel 2
 
-      - name: Locate libxmrig.so
+      - name: Find libxmrig.so
         shell: bash
         run: |
           set -euxo pipefail
 
           echo "Searching for libxmrig.so..."
-
           find build -type f -name "libxmrig.so" -print
-
-          test -n "$(find build -type f -name 'libxmrig.so' -print -quit)"
 
       - name: Package
         shell: bash
@@ -103,6 +91,11 @@ jobs:
           mkdir -p output/${{ matrix.abi }}
 
           LIB="$(find build -type f -name 'libxmrig.so' -print -quit)"
+
+          if [ -z "$LIB" ]; then
+            echo "ERROR: libxmrig.so was not produced."
+            exit 1
+          fi
 
           cp "$LIB" "output/${{ matrix.abi }}/libxmrig.so"
 
