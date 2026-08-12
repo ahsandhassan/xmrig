@@ -17,16 +17,12 @@ jobs:
         include:
           - abi: armeabi-v7a
             arch: arm
-            uv_arch: arm
           - abi: arm64-v8a
             arch: arm64
-            uv_arch: aarch64
           - abi: x86
             arch: x86
-            uv_arch: x86
           - abi: x86_64
             arch: x86_64
-            uv_arch: x86_64
 
     steps:
       - name: Checkout XMRig 6.26.0
@@ -49,7 +45,8 @@ jobs:
             pkg-config \
             unzip \
             wget \
-            git
+            git \
+            zip
 
       - name: Install Android SDK and NDK
         uses: android-actions/setup-android@v3
@@ -80,15 +77,19 @@ jobs:
 
           case "${{ matrix.abi }}" in
             armeabi-v7a)
+              TARGET_TRIPLE="armv7a-linux-androideabi"
               HOST="arm-linux-androideabi"
               ;;
             arm64-v8a)
+              TARGET_TRIPLE="aarch64-linux-android"
               HOST="aarch64-linux-android"
               ;;
             x86)
+              TARGET_TRIPLE="i686-linux-android"
               HOST="i686-linux-android"
               ;;
             x86_64)
+              TARGET_TRIPLE="x86_64-linux-android"
               HOST="x86_64-linux-android"
               ;;
           esac
@@ -96,8 +97,8 @@ jobs:
           export TOOLCHAIN="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
           export API=24
 
-          export CC="$TOOLCHAIN/bin/${HOST}${API}-clang"
-          export CXX="$TOOLCHAIN/bin/${HOST}${API}-clang++"
+          export CC="$TOOLCHAIN/bin/${TARGET_TRIPLE}${API}-clang"
+          export CXX="$TOOLCHAIN/bin/${TARGET_TRIPLE}${API}-clang++"
           export AR="$TOOLCHAIN/bin/llvm-ar"
           export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
           export STRIP="$TOOLCHAIN/bin/llvm-strip"
@@ -106,7 +107,7 @@ jobs:
             --host="$HOST" \
             --prefix="$GITHUB_WORKSPACE/libuv/install"
 
-          make -j2
+          make -j$(nproc)
           make install
 
           echo "UV_LIBRARY=$GITHUB_WORKSPACE/libuv/install/lib/libuv.a" >> "$GITHUB_ENV"
@@ -122,7 +123,6 @@ jobs:
 
           cd build
 
-          # حذف -DBUILD_SHARED_LIBS=ON جهت جلوگیری از خطای CMake
           cmake .. \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -140,7 +140,7 @@ jobs:
 
       - name: Build XMRig
         run: |
-          cmake --build build --parallel 2
+          cmake --build build --parallel $(nproc)
 
       - name: Locate xmrig binary
         shell: bash
@@ -148,13 +148,10 @@ jobs:
           set -euxo pipefail
 
           echo "Searching for xmrig executable..."
-
           find build -type f -name "xmrig" -print
 
           LIB="$(find build -type f -name 'xmrig' -print -quit)"
-
           test -n "$LIB"
-
           file "$LIB"
 
       - name: Package libxmrig.so
@@ -164,17 +161,15 @@ jobs:
 
           mkdir -p "output/${{ matrix.abi }}"
 
-          # یافتن فایل اجرایی اصلی xmrig
           LIB="$(find build -type f -name 'xmrig' -print -quit)"
 
-          # کپی کردن و تغییر نام به libxmrig.so برای استفاده در jniLibs اندروید
+          # کپی فایل اجرا و تغییر نام آن به libxmrig.so جهت قرارگیری در jniLibs اندروید
           cp "$LIB" "output/${{ matrix.abi }}/libxmrig.so"
 
-          echo "Final output:"
+          echo "Final output file info:"
           file "output/${{ matrix.abi }}/libxmrig.so"
 
           cd output
-
           zip -r "../libxmrig-${{ matrix.abi }}.zip" "${{ matrix.abi }}"
 
       - name: Upload artifact
