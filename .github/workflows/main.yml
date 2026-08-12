@@ -56,7 +56,10 @@ jobs:
 
       - name: Install Android NDK
         run: |
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+          sdkmanager --install \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;27.2.12479018"
 
           echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
@@ -65,7 +68,11 @@ jobs:
         run: |
           set -euxo pipefail
 
-          git clone --depth 1 --branch v1.49.2 https://github.com/libuv/libuv.git libuv
+          git clone \
+            --depth 1 \
+            --branch v1.49.2 \
+            https://github.com/libuv/libuv.git \
+            libuv
 
           cd libuv
 
@@ -127,7 +134,8 @@ jobs:
             -DUV_INCLUDE_DIR="$UV_INCLUDE_DIR" \
             -DWITH_HWLOC=OFF \
             -DWITH_OPENCL=OFF \
-            -DWITH_CUDA=OFF
+            -DWITH_CUDA=OFF \
+            -DWITH_TLS=OFF
 
       - name: Build XMRig
         run: |
@@ -153,7 +161,7 @@ jobs:
         run: |
           set -euxo pipefail
 
-          mkdir -p output/${{ matrix.abi }}
+          mkdir -p "output/${{ matrix.abi }}"
 
           LIB="$(find build -type f -name 'libxmrig.so' -print -quit)"
 
