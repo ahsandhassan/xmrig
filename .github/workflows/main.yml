@@ -29,11 +29,12 @@ jobs:
             toolchain_arch: x86_64
 
     steps:
-      - name: Checkout XMRig v6.26.0
-        uses: actions/checkout@v4
-        with:
-          ref: v6.26.0
-          fetch-depth: 1
+- name: Checkout XMRig v6.26.0
+  uses: actions/checkout@v4
+  with:
+    repository: xmrig/xmrig
+    ref: b2ca72480c58d197e18c885d9fc1a0c8d517e60a
+    fetch-depth: 1
 
       - name: Install build dependencies
         run: |
