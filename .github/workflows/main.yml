@@ -122,6 +122,7 @@ jobs:
 
           cd build
 
+          # حذف -DBUILD_SHARED_LIBS=ON جهت جلوگیری از خطای CMake
           cmake .. \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -129,7 +130,7 @@ jobs:
             -DANDROID_ABI="${{ matrix.abi }}" \
             -DANDROID_PLATFORM=android-24 \
             -DANDROID_STL=c++_shared \
-            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -DUV_LIBRARY="$UV_LIBRARY" \
             -DUV_INCLUDE_DIR="$UV_INCLUDE_DIR" \
             -DWITH_HWLOC=OFF \
@@ -141,16 +142,16 @@ jobs:
         run: |
           cmake --build build --parallel 2
 
-      - name: Locate libxmrig.so
+      - name: Locate xmrig binary
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "Searching for libxmrig.so..."
+          echo "Searching for xmrig executable..."
 
-          find build -type f -name "libxmrig.so" -print
+          find build -type f -name "xmrig" -print
 
-          LIB="$(find build -type f -name 'libxmrig.so' -print -quit)"
+          LIB="$(find build -type f -name 'xmrig' -print -quit)"
 
           test -n "$LIB"
 
@@ -163,8 +164,10 @@ jobs:
 
           mkdir -p "output/${{ matrix.abi }}"
 
-          LIB="$(find build -type f -name 'libxmrig.so' -print -quit)"
+          # یافتن فایل اجرایی اصلی xmrig
+          LIB="$(find build -type f -name 'xmrig' -print -quit)"
 
+          # کپی کردن و تغییر نام به libxmrig.so برای استفاده در jniLibs اندروید
           cp "$LIB" "output/${{ matrix.abi }}/libxmrig.so"
 
           echo "Final output:"
