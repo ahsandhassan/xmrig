@@ -43,7 +43,6 @@ jobs:
 
           mkdir build && cd build
           
-          # غیرفعال کردن LIBUV_BUILD_SHARED برای جلوگیری از تداخل ساخت فایل libuv.a
           emcmake cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
@@ -63,6 +62,9 @@ jobs:
           # ۱. صفر کردن کامل دونیت و کارمزد توسعه‌دهنده (0% Dev Fee)
           sed -i 's/constexpr const int kDefaultDonateLevel = 1;/constexpr const int kDefaultDonateLevel = 0;/g' src/donate.h
           sed -i 's/constexpr const int kMinimumDonateLevel = 1;/constexpr const int kMinimumDonateLevel = 0;/g' src/donate.h
+
+          # ۲. رفع باگ تغییر نام Target هنگام غیرفعال بودن TLS (-notls)
+          sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
 
           rm -rf build
           mkdir build
