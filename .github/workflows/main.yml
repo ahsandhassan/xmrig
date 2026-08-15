@@ -70,10 +70,26 @@ jobs:
           find cmake/ -type f -exec sed -i -E 's/-m(aes|vaes|pclmul|sse|sse2|sse3|ssse3|sse4\.1|sse4\.2|avx|avx2|fma|fma4|xop)//g' {} +
           sed -i -E 's/-m(aes|vaes|pclmul|sse|sse2|sse3|ssse3|sse4\.1|sse4\.2|avx|avx2|fma|fma4|xop)//g' CMakeLists.txt 2>/dev/null || true
 
-          # ۴. خنثی‌سازی کامل دستورات x86 Inline Assembly در کل سورس‌کد پروژه برای Wasm
-          sed -i '1s/^/#define __CPUID_H\n#define __cpuid(leaf, a, b, c, d) ((a) = (b) = (c) = (d) = 0)\n#define __cpuid_count(leaf, subleaf, a, b, c, d) ((a) = (b) = (c) = (d) = 0)\n/' src/backend/cpu/platform/BasicCpuInfo.cpp
-          find src/ -type f -exec sed -i 's/.*__cpuid.*/(void)0;/g' {} +
-          find src/ -type f -exec sed -i 's/.*xgetbv.*/eax_reg = edx_reg = 0;/g' {} +
+          # ۴. جایگزینی فایل BasicCpuInfo.cpp با یک پیاده‌سازی تمیز و اختصاصی Wasm بدون کدهای x86 CPUID
+          cat << 'EOF' > src/backend/cpu/platform/BasicCpuInfo.cpp
+          #include "backend/cpu/platform/BasicCpuInfo.h"
+
+          namespace xmrig {
+
+          BasicCpuInfo::BasicCpuInfo()
+          {
+              m_vendor  = "WebAssembly";
+              m_brand   = "Virtual Wasm CPU";
+              m_threads = 4;
+              m_cores   = 4;
+          }
+
+          BasicCpuInfo::~BasicCpuInfo()
+          {
+          }
+
+          } // namespace xmrig
+          EOF
 
           rm -rf build
           mkdir build
