@@ -42,13 +42,17 @@ jobs:
           cd libuv
 
           mkdir build && cd build
-          emcmake cmake .. -G Ninja \
+          
+          # غیرفعال کردن LIBUV_BUILD_SHARED برای جلوگیری از تداخل ساخت فایل libuv.a
+          emcmake cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=OFF
+            -DBUILD_TESTING=OFF \
+            -DLIBUV_BUILD_SHARED=OFF
 
           cmake --build . --parallel $(nproc)
 
-          echo "UV_LIBRARY=$GITHUB_WORKSPACE/libuv/build/libuv.a" >> "$GITHUB_ENV"
+          UV_LIB_PATH="$(readlink -f $(find . -name 'libuv*.a' -print -quit))"
+          echo "UV_LIBRARY=$UV_LIB_PATH" >> "$GITHUB_ENV"
           echo "UV_INCLUDE_DIR=$GITHUB_WORKSPACE/libuv/include" >> "$GITHUB_ENV"
 
       - name: Configure XMRig for WebAssembly
@@ -56,12 +60,15 @@ jobs:
         run: |
           set -euxo pipefail
 
-          # ۱. صفر کردن کامل دونیت و کارمزد توسعه‌دهنده (0% Dev Fee)
+          # ۱. صفر کردن کامل کارمزد توسعه‌دهنده (0% Dev Fee)
           sed -i 's/constexpr const int kDefaultDonateLevel = 1;/constexpr const int kDefaultDonateLevel = 0;/g' src/donate.h
           sed -i 's/constexpr const int kMinimumDonateLevel = 1;/constexpr const int kMinimumDonateLevel = 0;/g' src/donate.h
 
-          # ۲. رفع باگ‌های احتمالی CMake
-          sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
+          # ۲. حذف لینک‌های rt و pthread که در Wasm متفاوت مدیریت می‌شوند
+          sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} rt)//g' CMakeLists.txt
+          sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} pthread)//g' CMakeLists.txt
+          sed -i 's/\brt\b//g' CMakeLists.txt
+          sed -i 's/\bpthread\b//g' CMakeLists.txt
 
           rm -rf build
           mkdir build
@@ -92,7 +99,7 @@ jobs:
 
           mkdir -p output_wasm
 
-          # کپی کردن فایل‌های تولید شده (.wasm, .js, .worker.js)
+          # جمع‌آوری خروجی‌های .wasm و .js
           find build -type f \( -name "*.wasm" -o -name "*.js" -o -name "*.worker.js" \) -exec cp {} output_wasm/ \;
 
           cd output_wasm
