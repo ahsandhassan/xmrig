@@ -70,9 +70,8 @@ jobs:
           find cmake/ -type f -exec sed -i -E 's/-m(aes|vaes|pclmul|sse|sse2|sse3|ssse3|sse4\.1|sse4\.2|avx|avx2|fma|fma4|xop)//g' {} +
           sed -i -E 's/-m(aes|vaes|pclmul|sse|sse2|sse3|ssse3|sse4\.1|sse4\.2|avx|avx2|fma|fma4|xop)//g' CMakeLists.txt 2>/dev/null || true
 
-          # ۴. جایگزینی دستورات Inline Assembly x86 (مثل __cpuid و xgetbv) با کد خنثی C++
-          sed -i 's/__cpuid_count([^)]*);/(void)0;/g' src/backend/cpu/platform/BasicCpuInfo.cpp 2>/dev/null || true
-          sed -i 's/__asm__ __volatile__("xgetbv"[^;]*;/eax_reg = 0; edx_reg = 0;/g' src/backend/cpu/platform/BasicCpuInfo.cpp 2>/dev/null || true
+          # ۴. خنثی‌سازی دستورات x86 Inline Assembly در فایل BasicCpuInfo.cpp برای Wasm
+          sed -i '1s/^/#define __cpuid(level, a, b, c, d) do { a = b = c = d = 0; } while(0)\n#define __cpuid_count(level, count, a, b, c, d) do { a = b = c = d = 0; } while(0)\n#define __asm__(...)\n/' src/backend/cpu/platform/BasicCpuInfo.cpp
 
           rm -rf build
           mkdir build
@@ -82,7 +81,6 @@ jobs:
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DXMRIG_OS_LINUX=ON \
-            -DXMRIG_ARM=ON \
             -DUV_LIBRARY="$UV_LIBRARY" \
             -DUV_INCLUDE_DIR="$UV_INCLUDE_DIR" \
             -DWITH_ASM=OFF \
