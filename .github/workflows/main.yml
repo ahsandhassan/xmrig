@@ -74,8 +74,9 @@ jobs:
           find src/ -type f -exec sed -i -E 's/# *include *[<"]cpuid\.h[>"]/#define __cpuid(a,b,c,d,e) do { (b)=(c)=(d)=(e)=0; } while(0)\n#define __cpuid_count(a,b,c,d,e,f) do { (c)=(d)=(e)=(f)=0; } while(0)/g' {} +
           sed -i 's/__asm__ __volatile__("xgetbv": "=a"(eax_reg), "=d"(edx_reg) : "c"(0) : "cc");/eax_reg = 0; edx_reg = 0;/g' src/backend/cpu/platform/BasicCpuInfo.cpp
 
-          # ۵. جایگزینی x86intrin.h با emmintrin.h جهت فعال‌سازی پشتیبانی از __m128i روی Wasm SIMD
+          # ۵. جایگزینی x86intrin.h با emmintrin.h و مپ کردن دستورات AES به Soft AES برای Wasm
           find src/ -type f -exec sed -i -E 's/# *include *[<"](x86intrin|ia32intrin)\.h[>"]/#include <emmintrin.h>/g' {} +
+          sed -i '1s/^/#define _mm_aesenc_si128 soft_aesenc\n#define _mm_aeskeygenassist_si128 soft_aeskeygenassist\n/' src/crypto/cn/CryptoNight_x86.h
 
           rm -rf build
           mkdir build
