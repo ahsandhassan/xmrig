@@ -71,10 +71,12 @@ jobs:
           emcmake cmake .. \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DXMRIG_OS_LINUX=ON \
             -DUV_LIBRARY="$UV_LIBRARY" \
             -DUV_INCLUDE_DIR="$UV_INCLUDE_DIR" \
             -DWITH_ASM=OFF \
             -DWITH_MSR=OFF \
+            -DWITH_DMI=OFF \
             -DWITH_HWLOC=OFF \
             -DWITH_OPENCL=OFF \
             -DWITH_CUDA=OFF \
