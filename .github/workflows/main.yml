@@ -66,13 +66,17 @@ jobs:
           # ۲. رفع باگ تغییر نام Target هنگام غیرفعال بودن TLS (-notls)
           sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
 
-          # ۳. حذف پرچم‌های سخت‌افزاری غیرمجاز x86 (مثل -maes)
-          find cmake/ -type f -exec sed -i -E 's/-m(aes|vaes|pclmul)//g' {} +
-          sed -i -E 's/-m(aes|vaes|pclmul)//g' CMakeLists.txt 2>/dev/null || true
+          # ۳. حذف تمام پرچم‌های پرپردازنده x86 از اسکریپت‌های CMake
+          find cmake/ -type f -exec sed -i -E 's/-m(aes|vaes|pclmul|sse|sse2|sse3|ssse3|sse4\.1|sse4\.2|avx|avx2|fma|fma4|xop)//g' {} +
+          sed -i -E 's/-m(aes|vaes|pclmul|sse|sse2|sse3|ssse3|sse4\.1|sse4\.2|avx|avx2|fma|fma4|xop)//g' CMakeLists.txt 2>/dev/null || true
 
           # ۴. خنثی‌سازی کدهای x86 Inline Assembly و CPUID
           find src/ -type f -exec sed -i -E 's/# *include *[<"]cpuid\.h[>"]/#define __cpuid(a,b,c,d,e) do { (b)=(c)=(d)=(e)=0; } while(0)\n#define __cpuid_count(a,b,c,d,e,f) do { (c)=(d)=(e)=(f)=0; } while(0)/g' {} +
           sed -i 's/__asm__ __volatile__("xgetbv": "=a"(eax_reg), "=d"(edx_reg) : "c"(0) : "cc");/eax_reg = 0; edx_reg = 0;/g' src/backend/cpu/platform/BasicCpuInfo.cpp
+
+          # ۵. حذف کامل تمام هدرهای سخت‌افزاری x86 اینتل در کل سورس‌کد جهت اجبار به استفاده از کدهای Portable C++
+          find src/ -type f -exec sed -i -E 's/# *include *[<"](x86intrin|immintrin|emmintrin|mmintrin|pmmintrin|tmmintrin|smmintrin|nmmintrin|wmmintrin|ammintrin|fma4intrin|ia32intrin)\.h[>"]/\/* intrinsic removed *\/ /g' {} +
+          find src/crypto/ -type f -exec sed -i 's/|| defined(XMRIG_OS_LINUX)//g' {} +
 
           rm -rf build
           mkdir build
@@ -96,8 +100,8 @@ jobs:
             -DWITH_KAWPOW=OFF \
             -DWITH_CN_GPU=OFF \
             -DWITH_ASTROBWT=OFF \
-            -DCMAKE_C_FLAGS="-msimd128 -pthread -D__SSE__ -D__SSE2__ -D__SSSE3__ -D__SSE4_1__" \
-            -DCMAKE_CXX_FLAGS="-msimd128 -pthread -D__SSE__ -D__SSE2__ -D__SSSE3__ -D__SSE4_1__" \
+            -DCMAKE_C_FLAGS="-msimd128 -pthread" \
+            -DCMAKE_CXX_FLAGS="-msimd128 -pthread" \
             -DCMAKE_EXE_LINKER_FLAGS="-s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=4 -s WASM=1 -s INITIAL_MEMORY=256MB -s MAXIMUM_MEMORY=2GB -s ALLOW_MEMORY_GROWTH=1"
 
       - name: Build XMRig Wasm
