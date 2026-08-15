@@ -70,9 +70,13 @@ jobs:
           find cmake/ -type f -exec sed -i -E 's/-m(aes|vaes|pclmul|sse|sse2|sse3|ssse3|sse4\.1|sse4\.2|avx|avx2|fma|fma4|xop)//g' {} +
           sed -i -E 's/-m(aes|vaes|pclmul|sse|sse2|sse3|ssse3|sse4\.1|sse4\.2|avx|avx2|fma|fma4|xop)//g' CMakeLists.txt 2>/dev/null || true
 
-          # ۴. خنثی‌سازی کدهای x86 Inline Assembly با ماکروهای عمومی جهت جلوگیری از خطای Type mismatch
+          # ۴. خنثی‌سازی کدهای x86 Inline Assembly و CPUID
           find src/ -type f -exec sed -i -E 's/# *include *[<"]cpuid\.h[>"]/#define __cpuid(a,b,c,d,e) do { (b)=(c)=(d)=(e)=0; } while(0)\n#define __cpuid_count(a,b,c,d,e,f) do { (c)=(d)=(e)=(f)=0; } while(0)/g' {} +
           sed -i 's/__asm__ __volatile__("xgetbv": "=a"(eax_reg), "=d"(edx_reg) : "c"(0) : "cc");/eax_reg = 0; edx_reg = 0;/g' src/backend/cpu/platform/BasicCpuInfo.cpp
+
+          # ۵. سوئیچ کدهای کریپتو به حالت Portable C++ و مسدود کردن هدرهای x86 اینتل
+          find src/crypto/ -type f -exec sed -i 's/|| defined(XMRIG_OS_LINUX)//g' {} +
+          find src/ -type f -exec sed -i -E 's/# *include *[<"](x86intrin|immintrin|emmintrin|mmintrin|pmmintrin|tmmintrin|smmintrin|nmmintrin|wmmintrin|ammintrin)\.h[>"]/\/* intrinsic removed *\/ /g' {} +
 
           rm -rf build
           mkdir build
