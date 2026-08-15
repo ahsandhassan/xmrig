@@ -66,9 +66,9 @@ jobs:
           # ۲. رفع باگ تغییر نام Target هنگام غیرفعال بودن TLS (-notls)
           sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
 
-          # ۳. حذف پرچم‌های سخت‌افزاری x86 (مثل -maes) که در Wasm پشتیبانی نمی‌شوند
-          find cmake/ -type f -exec sed -i -E 's/-m(aes|vaes|pclmul)//g' {} +
-          sed -i -E 's/-m(aes|vaes|pclmul)//g' CMakeLists.txt 2>/dev/null || true
+          # ۳. حذف تمام پرچم‌های پرپردازنده x86 (مثل sse, avx, fma, aes) که در Wasm وجود ندارند
+          find cmake/ -type f -exec sed -i -E 's/-m(aes|vaes|pclmul|sse|sse2|sse3|ssse3|sse4\.1|sse4\.2|avx|avx2|fma|fma4|xop)//g' {} +
+          sed -i -E 's/-m(aes|vaes|pclmul|sse|sse2|sse3|ssse3|sse4\.1|sse4\.2|avx|avx2|fma|fma4|xop)//g' CMakeLists.txt 2>/dev/null || true
 
           rm -rf build
           mkdir build
@@ -88,6 +88,10 @@ jobs:
             -DWITH_CUDA=OFF \
             -DWITH_TLS=OFF \
             -DWITH_HTTPD=OFF \
+            -DWITH_GHOSTRIDER=OFF \
+            -DWITH_KAWPOW=OFF \
+            -DWITH_CN_GPU=OFF \
+            -DWITH_ASTROBWT=OFF \
             -DCMAKE_C_FLAGS="-msimd128 -pthread" \
             -DCMAKE_CXX_FLAGS="-msimd128 -pthread" \
             -DCMAKE_EXE_LINKER_FLAGS="-s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=4 -s WASM=1 -s INITIAL_MEMORY=256MB -s MAXIMUM_MEMORY=2GB -s ALLOW_MEMORY_GROWTH=1"
