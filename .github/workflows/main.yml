@@ -60,15 +60,9 @@ jobs:
         run: |
           set -euxo pipefail
 
-          # ۱. صفر کردن کامل کارمزد توسعه‌دهنده (0% Dev Fee)
+          # ۱. صفر کردن کامل دونیت و کارمزد توسعه‌دهنده (0% Dev Fee)
           sed -i 's/constexpr const int kDefaultDonateLevel = 1;/constexpr const int kDefaultDonateLevel = 0;/g' src/donate.h
           sed -i 's/constexpr const int kMinimumDonateLevel = 1;/constexpr const int kMinimumDonateLevel = 0;/g' src/donate.h
-
-          # ۲. حذف لینک‌های rt و pthread که در Wasm متفاوت مدیریت می‌شوند
-          sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} rt)//g' CMakeLists.txt
-          sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} pthread)//g' CMakeLists.txt
-          sed -i 's/\brt\b//g' CMakeLists.txt
-          sed -i 's/\bpthread\b//g' CMakeLists.txt
 
           rm -rf build
           mkdir build
@@ -79,6 +73,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DUV_LIBRARY="$UV_LIBRARY" \
             -DUV_INCLUDE_DIR="$UV_INCLUDE_DIR" \
+            -DWITH_ASM=OFF \
+            -DWITH_MSR=OFF \
             -DWITH_HWLOC=OFF \
             -DWITH_OPENCL=OFF \
             -DWITH_CUDA=OFF \
