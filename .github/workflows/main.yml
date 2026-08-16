@@ -82,7 +82,7 @@ jobs:
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
 
-          # ۷. پیاده‌سازی متدهای استاتیک VirtualMemory برای WebAssembly بر پایه posix_memalign/malloc
+          # ۷. پیاده‌سازی متدهای دقیق VirtualMemory برای WebAssembly بر پایه malloc و الاینمنت ۴ کیلوبایتی
           cat << 'EOF' > src/crypto/common/VirtualMemory_unix.cpp
           #include "crypto/common/VirtualMemory.h"
           #include <cstdlib>
@@ -90,7 +90,7 @@ jobs:
 
           namespace xmrig {
 
-          uint8_t *VirtualMemory::allocate(size_t size, bool hugePages, bool isExecutable, uint32_t node)
+          void *VirtualMemory::allocateExecutableMemory(size_t size, bool hugePages)
           {
               void *ptr = nullptr;
               if (posix_memalign(&ptr, 4096, size) != 0 || !ptr) {
@@ -99,23 +99,21 @@ jobs:
               if (ptr) {
                   std::memset(ptr, 0, size);
               }
-              return static_cast<uint8_t*>(ptr);
+              return ptr;
           }
 
-          void VirtualMemory::destroy(uint8_t *ptr, size_t size)
-          {
-              if (ptr) {
-                  std::free(ptr);
-              }
-          }
-
-          void VirtualMemory::flush(uint8_t *ptr, size_t size)
-          {
-          }
-
-          bool VirtualMemory::protect(uint8_t *ptr, size_t size, bool isExecutable)
+          bool VirtualMemory::protectRW(void *ptr, size_t size)
           {
               return true;
+          }
+
+          bool VirtualMemory::protectRX(void *ptr, size_t size)
+          {
+              return true;
+          }
+
+          void VirtualMemory::flushInstructionCache(void *ptr, size_t size)
+          {
           }
 
           } // namespace xmrig
