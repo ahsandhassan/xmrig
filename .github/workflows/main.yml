@@ -91,7 +91,6 @@ jobs:
           #include <cstdlib>
           #include <cstring>
           #include <cstdint>
-          #include <pthread.h>
 
           namespace xmrig {
 
@@ -145,7 +144,6 @@ jobs:
           int uv_get_free_memory(void) { return 0; }
           uint64_t uv_get_total_memory(void) { return 2147483648ULL; }
           void uv_loadavg(double avg[3]) { if (avg) { avg[0] = avg[1] = avg[2] = 0.0; } }
-          int pthread_setaffinity_np(pthread_t, size_t, const void*) { return 0; }
           }
           EOF
 
