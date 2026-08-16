@@ -78,9 +78,9 @@ jobs:
           find src/ -type f -exec sed -i -E 's/# *include *[<"](x86intrin|ia32intrin)\.h[>"]/#include <emmintrin.h>/g' {} +
           sed -i '1s/^/#define _mm_aesenc_si128 soft_aesenc\n#define _mm_aeskeygenassist_si128(a,b) soft_aeskeygenassist<b>(a)\n/' src/crypto/cn/CryptoNight_x86.h
 
-          # ۶. خنثی‌سازی دستورات کنترل رجیستر MXCSR در RandomX
-          find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr([^)]*);/(void)0;/g' {} +
-          find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr()/0/g' {} +
+          # ۶. خنثی‌سازی کامل تمام دستورات _mm_setcsr (حتی با پرانتزهای تو در تو) در RandomX
+          find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
+          find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
 
           rm -rf build
           mkdir build
