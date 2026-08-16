@@ -26,6 +26,10 @@ jobs:
             cmake \
             ninja-build \
             python3 \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
             zip
 
       - name: Setup Emscripten SDK
@@ -41,19 +45,18 @@ jobs:
           git clone --depth 1 --branch v1.49.2 https://github.com/libuv/libuv.git libuv
           cd libuv
 
-          mkdir build && cd build
-          
-          emcmake cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=OFF \
-            -DLIBUV_BUILD_SHARED=OFF \
-            -DCMAKE_C_FLAGS="-pthread"
+          sh autogen.sh
+          emconfigure ./configure \
+            CFLAGS="-pthread -O3" \
+            --disable-shared \
+            --enable-static \
+            --prefix="$GITHUB_WORKSPACE/libuv/install"
 
-          cmake --build . --parallel $(nproc)
+          emmake make -j$(nproc)
+          emmake make install
 
-          UV_LIB_PATH="$(readlink -f $(find . -name 'libuv*.a' -print -quit))"
-          echo "UV_LIBRARY=$UV_LIB_PATH" >> "$GITHUB_ENV"
-          echo "UV_INCLUDE_DIR=$GITHUB_WORKSPACE/libuv/include" >> "$GITHUB_ENV"
+          echo "UV_LIBRARY=$GITHUB_WORKSPACE/libuv/install/lib/libuv.a" >> "$GITHUB_ENV"
+          echo "UV_INCLUDE_DIR=$GITHUB_WORKSPACE/libuv/install/include" >> "$GITHUB_ENV"
 
       - name: Configure XMRig for WebAssembly
         shell: bash
@@ -64,7 +67,7 @@ jobs:
           sed -i 's/constexpr const int kDefaultDonateLevel = 1;/constexpr const int kDefaultDonateLevel = 0;/g' src/donate.h
           sed -i 's/constexpr const int kMinimumDonateLevel = 1;/constexpr const int kMinimumDonateLevel = 0;/g' src/donate.h
 
-          # ۲. رفع باگ تغییر نام Target هنگام غیرفعال بودن TLS (-notls)
+          # ۲. رفع باگ تغییر نام Target هنگام غیرفعال بودن TLS (-notls) و غیرفعال‌سازی strip
           sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
           sed -i 's/COMMAND strip/COMMAND true/g' CMakeLists.txt 2>/dev/null || true
           sed -i 's/COMMAND \${CMAKE_STRIP}/COMMAND true/g' CMakeLists.txt 2>/dev/null || true
@@ -81,11 +84,13 @@ jobs:
           find src/ -type f -exec sed -i -E 's/# *include *[<"](x86intrin|ia32intrin)\.h[>"]/#include <emmintrin.h>/g' {} +
           sed -i '1s/^/#define _mm_aesenc_si128 soft_aesenc\n#define _mm_aeskeygenassist_si128(a,b) soft_aeskeygenassist<b>(a)\n/' src/crypto/cn/CryptoNight_x86.h
 
-          # ۶. خنثی‌سازی کامل تمام دستورات _mm_setcsr در RandomX
+          # ۶. خنثی‌سازی کامل تمام دستورات _mm_setcsr در RandomX و توابع خاص سیستم‌عامل لینوکس
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
+          sed -i 's/pthread_setaffinity_np([^)]*)/0/g' src/base/kernel/Platform_unix.cpp
+          sed -i 's/sched_setscheduler([^)]*)/0/g' src/base/kernel/Platform_unix.cpp
 
-          # ۷. پیاده‌سازی متدهای VirtualMemory و توابع جایگزین سیستم‌عامل برای WebAssembly
+          # ۷. پیاده‌سازی کامل توابع VirtualMemory برای WebAssembly
           cat << 'EOF' > src/crypto/common/VirtualMemory_unix.cpp
           #include "crypto/common/VirtualMemory.h"
           #include <cstdlib>
@@ -130,21 +135,42 @@ jobs:
               return false;
           }
 
-          } // namespace xmrig
-
-          extern "C" {
-          int uv_fs_event_init(void*, void*) { return 0; }
-          int uv_fs_event_start(void*, void*, const char*, unsigned int) { return 0; }
-          int uv_fs_event_stop(void*) { return 0; }
-          int uv_exepath(char* buffer, size_t* size) { if (buffer && size && *size > 0) { buffer[0] = 0; } return 0; }
-          char** uv_setup_args(int argc, char** argv) { return argv; }
-          int uv_interface_addresses(void**, int* count) { if (count) *count = 0; return 0; }
-          void uv_free_interface_addresses(void*, int) {}
-          int uv_resident_set_memory(size_t* rss) { if (rss) *rss = 0; return 0; }
-          int uv_get_free_memory(void) { return 0; }
-          uint64_t uv_get_total_memory(void) { return 2147483648ULL; }
-          void uv_loadavg(double avg[3]) { if (avg) { avg[0] = avg[1] = avg[2] = 0.0; } }
+          void *VirtualMemory::allocateLargePagesMemory(size_t size)
+          {
+              return nullptr;
           }
+
+          void *VirtualMemory::allocateLargePagesMemory()
+          {
+              return nullptr;
+          }
+
+          void *VirtualMemory::allocateOneGbPagesMemory(size_t size)
+          {
+              return nullptr;
+          }
+
+          void *VirtualMemory::allocateOneGbPagesMemory()
+          {
+              return nullptr;
+          }
+
+          void VirtualMemory::adviseLargePages(void *ptr, size_t size)
+          {
+          }
+
+          void VirtualMemory::freeLargePagesMemory(void *ptr, size_t size)
+          {
+              if (ptr) {
+                  std::free(ptr);
+              }
+          }
+
+          void VirtualMemory::osInit(size_t size)
+          {
+          }
+
+          } // namespace xmrig
           EOF
 
           rm -rf build
