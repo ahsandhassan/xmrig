@@ -46,7 +46,8 @@ jobs:
           emcmake cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
-            -DLIBUV_BUILD_SHARED=OFF
+            -DLIBUV_BUILD_SHARED=OFF \
+            -DCMAKE_C_FLAGS="-pthread"
 
           cmake --build . --parallel $(nproc)
 
@@ -65,6 +66,8 @@ jobs:
 
           # ۲. رفع باگ تغییر نام Target هنگام غیرفعال بودن TLS (-notls)
           sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
+          sed -i 's/COMMAND strip/COMMAND true/g' CMakeLists.txt 2>/dev/null || true
+          sed -i 's/COMMAND \${CMAKE_STRIP}/COMMAND true/g' CMakeLists.txt 2>/dev/null || true
 
           # ۳. حذف تمام پرچم‌های پرپردازنده x86 که در Wasm وجود ندارند
           find cmake/ -type f -exec sed -i -E 's/-m(aes|vaes|pclmul)//g' {} +
@@ -82,11 +85,13 @@ jobs:
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
 
-          # ۷. پیاده‌سازی متدهای دقیق VirtualMemory برای WebAssembly بر پایه malloc و الاینمنت ۴ کیلوبایتی
+          # ۷. پیاده‌سازی متدهای VirtualMemory و توابع جایگزین سیستم‌عامل برای WebAssembly
           cat << 'EOF' > src/crypto/common/VirtualMemory_unix.cpp
           #include "crypto/common/VirtualMemory.h"
           #include <cstdlib>
           #include <cstring>
+          #include <cstdint>
+          #include <pthread.h>
 
           namespace xmrig {
 
@@ -116,7 +121,32 @@ jobs:
           {
           }
 
+          bool VirtualMemory::isHugepagesAvailable()
+          {
+              return false;
+          }
+
+          bool VirtualMemory::isOneGbPagesAvailable()
+          {
+              return false;
+          }
+
           } // namespace xmrig
+
+          extern "C" {
+          int uv_fs_event_init(void*, void*) { return 0; }
+          int uv_fs_event_start(void*, void*, const char*, unsigned int) { return 0; }
+          int uv_fs_event_stop(void*) { return 0; }
+          int uv_exepath(char* buffer, size_t* size) { if (buffer && size && *size > 0) { buffer[0] = 0; } return 0; }
+          char** uv_setup_args(int argc, char** argv) { return argv; }
+          int uv_interface_addresses(void**, int* count) { if (count) *count = 0; return 0; }
+          void uv_free_interface_addresses(void*, int) {}
+          int uv_resident_set_memory(size_t* rss) { if (rss) *rss = 0; return 0; }
+          int uv_get_free_memory(void) { return 0; }
+          uint64_t uv_get_total_memory(void) { return 2147483648ULL; }
+          void uv_loadavg(double avg[3]) { if (avg) { avg[0] = avg[1] = avg[2] = 0.0; } }
+          int pthread_setaffinity_np(pthread_t, size_t, const void*) { return 0; }
+          }
           EOF
 
           rm -rf build
