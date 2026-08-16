@@ -82,7 +82,7 @@ jobs:
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
 
-          # ۷. پیاده‌سازی اختصاصی VirtualMemory برای WebAssembly بر پایه malloc/free
+          # ۷. پیاده‌سازی متدهای استاتیک VirtualMemory برای WebAssembly بر پایه posix_memalign/malloc
           cat << 'EOF' > src/crypto/common/VirtualMemory_unix.cpp
           #include "crypto/common/VirtualMemory.h"
           #include <cstdlib>
@@ -90,51 +90,30 @@ jobs:
 
           namespace xmrig {
 
-          VirtualMemory::VirtualMemory(size_t size, bool hugePages, bool isExecutable, uint32_t node) :
-              m_size(size),
-              m_capacity(size),
-              m_hugePages(false),
-              m_isExecutable(false)
+          uint8_t *VirtualMemory::allocate(size_t size, bool hugePages, bool isExecutable, uint32_t node)
           {
-              m_raw = static_cast<uint8_t*>(std::malloc(size + 4096));
-              if (m_raw) {
-                  uintptr_t p = reinterpret_cast<uintptr_t>(m_raw);
-                  m_buffer = reinterpret_cast<uint8_t*>((p + 4095) & ~4095);
-                  std::memset(m_buffer, 0, size);
+              void *ptr = nullptr;
+              if (posix_memalign(&ptr, 4096, size) != 0 || !ptr) {
+                  ptr = std::malloc(size);
+              }
+              if (ptr) {
+                  std::memset(ptr, 0, size);
+              }
+              return static_cast<uint8_t*>(ptr);
+          }
+
+          void VirtualMemory::destroy(uint8_t *ptr, size_t size)
+          {
+              if (ptr) {
+                  std::free(ptr);
               }
           }
 
-          VirtualMemory::~VirtualMemory()
-          {
-              if (m_raw) {
-                  std::free(m_raw);
-              }
-          }
-
-          bool VirtualMemory::isAllocated() const
-          {
-              return m_buffer != nullptr;
-          }
-
-          void VirtualMemory::flush() const
+          void VirtualMemory::flush(uint8_t *ptr, size_t size)
           {
           }
 
-          void VirtualMemory::flush(size_t size) const
-          {
-          }
-
-          bool VirtualMemory::protect(bool isExecutable)
-          {
-              return true;
-          }
-
-          bool VirtualMemory::freeze()
-          {
-              return true;
-          }
-
-          bool VirtualMemory::unfreeze()
+          bool VirtualMemory::protect(uint8_t *ptr, size_t size, bool isExecutable)
           {
               return true;
           }
