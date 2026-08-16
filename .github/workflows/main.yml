@@ -86,7 +86,7 @@ jobs:
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
 
-          # ۷. پیاده‌سازی متدهای دقیق و تمیز Platform برای WebAssembly
+          # ۷. پیاده‌سازی متدهای دقیق Platform برای WebAssembly
           cat << 'EOF' > src/base/kernel/Platform_unix.cpp
           #include "base/kernel/Platform.h"
           #include <cstdint>
@@ -98,19 +98,12 @@ jobs:
               return true;
           }
 
-          bool Platform::setProcessPriority(int)
+          void Platform::setProcessPriority(int)
           {
-              return true;
           }
 
-          bool Platform::setThreadPriority(int)
+          void Platform::setThreadPriority(int)
           {
-              return true;
-          }
-
-          bool Platform::isElevated()
-          {
-              return false;
           }
 
           } // namespace xmrig
