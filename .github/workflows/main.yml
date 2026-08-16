@@ -26,10 +26,6 @@ jobs:
             cmake \
             ninja-build \
             python3 \
-            autoconf \
-            automake \
-            libtool \
-            pkg-config \
             zip
 
       - name: Setup Emscripten SDK
@@ -45,18 +41,23 @@ jobs:
           git clone --depth 1 --branch v1.49.2 https://github.com/libuv/libuv.git libuv
           cd libuv
 
-          sh autogen.sh
-          emconfigure ./configure \
-            CFLAGS="-pthread -O3" \
-            --disable-shared \
-            --enable-static \
-            --prefix="$GITHUB_WORKSPACE/libuv/install"
+          # اضافه کردن فایل‌های استاندارد POSIX (بدون وابستگی به epoll) به CMakeLists.txt در libuv
+          sed -i 's/add_library(uv_a STATIC ${uv_sources})/list(APPEND uv_sources src\/unix\/posix-hrtime.c src\/unix\/posix-poll.c src\/unix\/no-fsevents.c src\/unix\/no-proctitle.c)\nadd_library(uv_a STATIC ${uv_sources})/g' CMakeLists.txt
 
-          emmake make -j$(nproc)
-          emmake make install
+          mkdir build && cd build
+          
+          emcmake cmake .. \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DLIBUV_BUILD_SHARED=OFF \
+            -DCMAKE_C_FLAGS="-pthread"
 
-          echo "UV_LIBRARY=$GITHUB_WORKSPACE/libuv/install/lib/libuv.a" >> "$GITHUB_ENV"
-          echo "UV_INCLUDE_DIR=$GITHUB_WORKSPACE/libuv/install/include" >> "$GITHUB_ENV"
+          cmake --build . --parallel $(nproc)
+
+          UV_LIB_PATH="$(readlink -f $(find . -name 'libuv*.a' -print -quit))"
+          echo "UV_LIBRARY=$UV_LIB_PATH" >> "$GITHUB_ENV"
+          echo "UV_INCLUDE_DIR=$GITHUB_WORKSPACE/libuv/include" >> "$GITHUB_ENV"
 
       - name: Configure XMRig for WebAssembly
         shell: bash
