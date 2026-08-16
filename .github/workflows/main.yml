@@ -82,43 +82,13 @@ jobs:
           find src/ -type f -exec sed -i -E 's/# *include *[<"](x86intrin|ia32intrin)\.h[>"]/#include <emmintrin.h>/g' {} +
           sed -i '1s/^/#define _mm_aesenc_si128 soft_aesenc\n#define _mm_aeskeygenassist_si128(a,b) soft_aeskeygenassist<b>(a)\n/' src/crypto/cn/CryptoNight_x86.h
 
-          # ۶. خنثی‌سازی کامل تمام دستورات _mm_setcsr در RandomX
+          # ۶. خنثی‌سازی کامل تمام دستورات _mm_setcsr در RandomX و توابع خاص سیستم‌عامل لینوکس
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
+          sed -i 's/pthread_setaffinity_np(.*)/0/g' src/base/kernel/Platform_unix.cpp
+          sed -i 's/sched_setscheduler([^)]*)/0/g' src/base/kernel/Platform_unix.cpp
 
-          # ۷. پیاده‌سازی متدهای تمیز Platform برای WebAssembly
-          cat << 'EOF' > src/base/kernel/Platform_unix.cpp
-          #include "base/kernel/Platform.h"
-
-          namespace xmrig {
-
-          bool Platform::setAffinity(uint64_t)
-          {
-              return true;
-          }
-
-          bool Platform::setPriority(int)
-          {
-              return true;
-          }
-
-          void Platform::init()
-          {
-          }
-
-          void Platform::release()
-          {
-          }
-
-          bool Platform::isElevated()
-          {
-              return false;
-          }
-
-          } // namespace xmrig
-          EOF
-
-          # ۸. پیاده‌سازی متدهای دقیق VirtualMemory و توابع داخلی libuv برای WebAssembly
+          # ۷. پیاده‌سازی متدهای دقیق VirtualMemory و توابع داخلی libuv برای WebAssembly
           cat << 'EOF' > src/crypto/common/VirtualMemory_unix.cpp
           #include "crypto/common/VirtualMemory.h"
           #include <cstdlib>
