@@ -86,11 +86,11 @@ jobs:
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
 
-          # ۷. پیاده‌سازی متدهای کامل Platform برای WebAssembly
+          # ۷. پیاده‌سازی متدهای دقیق و سازگار با WebAssembly در Platform_unix.cpp
           cat << 'EOF' > src/base/kernel/Platform_unix.cpp
           #include "base/kernel/Platform.h"
-          #include "base/tools/String.h"
           #include <cstdint>
+          #include <cstring>
 
           namespace xmrig {
 
@@ -107,9 +107,9 @@ jobs:
           {
           }
 
-          String Platform::createUserAgent()
+          char *Platform::createUserAgent()
           {
-              return "XMRig/6.26.0 (WebAssembly)";
+              return strdup("XMRig/6.26.0 (WebAssembly)");
           }
 
           bool Platform::isOnBatteryPower()
@@ -125,7 +125,7 @@ jobs:
           } // namespace xmrig
           EOF
 
-          # ۸. پیاده‌سازی متدهای کامل VirtualMemory و توابع libuv برای WebAssembly
+          # ۸. پیاده‌سازی متدهای دقیق VirtualMemory و توابع داخلی libuv برای WebAssembly
           cat << 'EOF' > src/crypto/common/VirtualMemory_unix.cpp
           #include "crypto/common/VirtualMemory.h"
           #include <cstdlib>
