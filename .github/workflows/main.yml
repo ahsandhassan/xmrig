@@ -86,9 +86,10 @@ jobs:
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
 
-          # ۷. پیاده‌سازی متدهای دقیق Platform برای WebAssembly
+          # ۷. پیاده‌سازی متدهای کامل Platform برای WebAssembly
           cat << 'EOF' > src/base/kernel/Platform_unix.cpp
           #include "base/kernel/Platform.h"
+          #include "base/tools/String.h"
           #include <cstdint>
 
           namespace xmrig {
@@ -106,10 +107,25 @@ jobs:
           {
           }
 
+          String Platform::createUserAgent()
+          {
+              return "XMRig/6.26.0 (WebAssembly)";
+          }
+
+          bool Platform::isOnBatteryPower()
+          {
+              return false;
+          }
+
+          uint64_t Platform::idleTime()
+          {
+              return 0;
+          }
+
           } // namespace xmrig
           EOF
 
-          # ۸. پیاده‌سازی متدهای دقیق VirtualMemory و توابع داخلی libuv برای WebAssembly
+          # ۸. پیاده‌سازی متدهای کامل VirtualMemory و توابع libuv برای WebAssembly
           cat << 'EOF' > src/crypto/common/VirtualMemory_unix.cpp
           #include "crypto/common/VirtualMemory.h"
           #include <cstdlib>
@@ -186,6 +202,11 @@ jobs:
               }
           }
 
+          bool VirtualMemory::freeLargePagesMemory()
+          {
+              return true;
+          }
+
           void VirtualMemory::osInit(size_t size)
           {
           }
@@ -194,11 +215,12 @@ jobs:
 
           extern "C" {
           uint64_t uv__hrtime(unsigned int) { return 0; }
-          int uv__io_poll(void*, int) { return 0; }
+          void uv__io_poll(void*, int) {}
           int uv__platform_loop_init(void*) { return 0; }
+          void uv__platform_loop_delete(void*) {}
           void uv__platform_invalidate_fd(void*, int) {}
           void uv__process_title_cleanup(void) {}
-          int uv__fs_event_close(void*) { return 0; }
+          void uv__fs_event_close(void*) {}
           int uv_fs_event_init(void*, void*) { return 0; }
           int uv_fs_event_start(void*, void*, const char*, unsigned int) { return 0; }
           int uv_fs_event_stop(void*) { return 0; }
