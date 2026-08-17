@@ -206,8 +206,9 @@ jobs:
               }
           }
 
-          void VirtualMemory::freeLargePagesMemory()
+          bool VirtualMemory::freeLargePagesMemory()
           {
+              return true;
           }
 
           void VirtualMemory::osInit(size_t size)
@@ -218,7 +219,6 @@ jobs:
 
           extern "C" {
           int uv_exepath(char* buffer, size_t* size) { if (buffer && size && *size > 0) { buffer[0] = 0; } return 0; }
-          char** uv_setup_args(int argc, char** argv) { return argv; }
           int uv_interface_addresses(void**, int* count) { if (count) *count = 0; return 0; }
           void uv_free_interface_addresses(void*, int) {}
           int uv_resident_set_memory(size_t* rss) { if (rss) *rss = 0; return 0; }
