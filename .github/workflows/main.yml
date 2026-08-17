@@ -1,4 +1,4 @@
-name: Build XMRig 6.26.0 - Android (Zero Fee)
+name: Build XMRig 6.26.0 - WebAssembly (Zero Fee)
 
 on:
   workflow_dispatch:
@@ -8,21 +8,8 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.abi }}
+    name: Build WebAssembly (WASM)
     runs-on: ubuntu-24.04
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - abi: armeabi-v7a
-            arch: arm
-          - abi: arm64-v8a
-            arch: arm64
-          - abi: x86
-            arch: x86
-          - abi: x86_64
-            arch: x86_64
 
     steps:
       - name: Checkout XMRig 6.26.0
@@ -39,81 +26,41 @@ jobs:
             cmake \
             ninja-build \
             python3 \
-            autoconf \
-            automake \
-            libtool \
-            pkg-config \
-            unzip \
-            wget \
-            git \
             zip
 
-      - name: Install Android SDK and NDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Emscripten SDK
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64
 
-      - name: Install Android NDK
-        run: |
-          sdkmanager --install \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "ndk;27.2.12479018"
-
-          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
-
-      - name: Build libuv for Android
+      - name: Build libuv for WebAssembly
         shell: bash
         run: |
           set -euxo pipefail
 
-          git clone \
-            --depth 1 \
-            --branch v1.49.2 \
-            https://github.com/libuv/libuv.git \
-            libuv
-
+          git clone --depth 1 --branch v1.49.2 https://github.com/libuv/libuv.git libuv
           cd libuv
 
-          sh autogen.sh
+          # فعال‌سازی حلقه رویدادهای استاندارد POSIX Poll برای WebAssembly در libuv
+          sed -i '1s/^/#if defined(__EMSCRIPTEN__)\n# include "uv\/posix.h"\n#endif\n/' include/uv/unix.h
+          sed -i 's/add_library(uv_a STATIC ${uv_sources})/list(APPEND uv_sources src\/unix\/posix-poll.c src\/unix\/posix-hrtime.c src\/unix\/no-fsevents.c src\/unix\/no-proctitle.c)\nadd_library(uv_a STATIC ${uv_sources})/g' CMakeLists.txt
 
-          case "${{ matrix.abi }}" in
-            armeabi-v7a)
-              TARGET_TRIPLE="armv7a-linux-androideabi"
-              HOST="arm-linux-androideabi"
-              ;;
-            arm64-v8a)
-              TARGET_TRIPLE="aarch64-linux-android"
-              HOST="aarch64-linux-android"
-              ;;
-            x86)
-              TARGET_TRIPLE="i686-linux-android"
-              HOST="i686-linux-android"
-              ;;
-            x86_64)
-              TARGET_TRIPLE="x86_64-linux-android"
-              HOST="x86_64-linux-android"
-              ;;
-          esac
+          mkdir build && cd build
+          
+          emcmake cmake .. \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DLIBUV_BUILD_SHARED=OFF \
+            -DCMAKE_C_FLAGS="-pthread -D_GNU_SOURCE"
 
-          export TOOLCHAIN="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
-          export API=24
+          cmake --build . --parallel $(nproc)
 
-          export CC="$TOOLCHAIN/bin/${TARGET_TRIPLE}${API}-clang"
-          export CXX="$TOOLCHAIN/bin/${TARGET_TRIPLE}${API}-clang++"
-          export AR="$TOOLCHAIN/bin/llvm-ar"
-          export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
-          export STRIP="$TOOLCHAIN/bin/llvm-strip"
+          UV_LIB_PATH="$(readlink -f $(find . -name 'libuv*.a' -print -quit))"
+          echo "UV_LIBRARY=$UV_LIB_PATH" >> "$GITHUB_ENV"
+          echo "UV_INCLUDE_DIR=$GITHUB_WORKSPACE/libuv/include" >> "$GITHUB_ENV"
 
-          ./configure \
-            --host="$HOST" \
-            --prefix="$GITHUB_WORKSPACE/libuv/install"
-
-          make -j$(nproc)
-          make install
-
-          echo "UV_LIBRARY=$GITHUB_WORKSPACE/libuv/install/lib/libuv.a" >> "$GITHUB_ENV"
-          echo "UV_INCLUDE_DIR=$GITHUB_WORKSPACE/libuv/install/include" >> "$GITHUB_ENV"
-
-      - name: Configure XMRig
+      - name: Configure XMRig for WebAssembly
         shell: bash
         run: |
           set -euxo pipefail
@@ -122,74 +69,211 @@ jobs:
           sed -i 's/constexpr const int kDefaultDonateLevel = 1;/constexpr const int kDefaultDonateLevel = 0;/g' src/donate.h
           sed -i 's/constexpr const int kMinimumDonateLevel = 1;/constexpr const int kMinimumDonateLevel = 0;/g' src/donate.h
 
-          # ۲. رفع باگ -notls
+          # ۲. رفع باگ تغییر نام Target هنگام غیرفعال بودن TLS (-notls) و غیرفعال‌سازی strip
           sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
-          sed -i 's/TARGET ${PROJECT_NAME}/TARGET ${CMAKE_PROJECT_NAME}/g' CMakeLists.txt
+          sed -i 's/COMMAND strip/COMMAND true/g' CMakeLists.txt 2>/dev/null || true
+          sed -i 's/COMMAND \${CMAKE_STRIP}/COMMAND true/g' CMakeLists.txt 2>/dev/null || true
 
-          # ۳. حذف پرچم‌های -lpthread و -lrt
-          sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} rt)//g' CMakeLists.txt
-          sed -i 's/set(EXTRA_LIBS ${EXTRA_LIBS} pthread)//g' CMakeLists.txt
-          sed -i 's/\brt\b//g' CMakeLists.txt
-          sed -i 's/\bpthread\b//g' CMakeLists.txt
+          # ۳. حذف تمام پرچم‌های پرپردازنده x86 که در Wasm وجود ندارند
+          find cmake/ -type f -exec sed -i -E 's/-m(aes|vaes|pclmul)//g' {} +
+          sed -i -E 's/-m(aes|vaes|pclmul)//g' CMakeLists.txt 2>/dev/null || true
+
+          # ۴. خنثی‌سازی کدهای x86 Inline Assembly و CPUID
+          find src/ -type f -exec sed -i -E 's/# *include *[<"]cpuid\.h[>"]/#define __cpuid(a,b,c,d,e) do { (b)=(c)=(d)=(e)=0; } while(0)\n#define __cpuid_count(a,b,c,d,e,f) do { (c)=(d)=(e)=(f)=0; } while(0)/g' {} +
+          sed -i 's/__asm__ __volatile__("xgetbv": "=a"(eax_reg), "=d"(edx_reg) : "c"(0) : "cc");/eax_reg = 0; edx_reg = 0;/g' src/backend/cpu/platform/BasicCpuInfo.cpp
+
+          # ۵. جایگزینی x86intrin.h با emmintrin.h و مپ کردن Soft AES برای CryptoNight
+          find src/ -type f -exec sed -i -E 's/# *include *[<"](x86intrin|ia32intrin)\.h[>"]/#include <emmintrin.h>/g' {} +
+          sed -i '1s/^/#define _mm_aesenc_si128 soft_aesenc\n#define _mm_aeskeygenassist_si128(a,b) soft_aeskeygenassist<b>(a)\n/' src/crypto/cn/CryptoNight_x86.h
+
+          # ۶. خنثی‌سازی کامل تمام دستورات _mm_setcsr در RandomX
+          find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
+          find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
+
+          # ۷. پیاده‌سازی متدهای تمیز Platform برای WebAssembly
+          cat << 'EOF' > src/base/kernel/Platform_unix.cpp
+          #include "base/kernel/Platform.h"
+          #include <cstdint>
+          #include <cstring>
+
+          namespace xmrig {
+
+          bool Platform::setThreadAffinity(uint64_t)
+          {
+              return true;
+          }
+
+          void Platform::setProcessPriority(int)
+          {
+          }
+
+          void Platform::setThreadPriority(int)
+          {
+          }
+
+          char *Platform::createUserAgent()
+          {
+              return strdup("XMRig/6.26.0 (WebAssembly)");
+          }
+
+          bool Platform::isOnBatteryPower()
+          {
+              return false;
+          }
+
+          uint64_t Platform::idleTime()
+          {
+              return 0;
+          }
+
+          } // namespace xmrig
+          EOF
+
+          # ۸. پیاده‌سازی متدهای VirtualMemory برای WebAssembly
+          cat << 'EOF' > src/crypto/common/VirtualMemory_unix.cpp
+          #include "crypto/common/VirtualMemory.h"
+          #include <cstdlib>
+          #include <cstring>
+          #include <cstdint>
+
+          namespace xmrig {
+
+          void *VirtualMemory::allocateExecutableMemory(size_t size, bool hugePages)
+          {
+              void *ptr = nullptr;
+              if (posix_memalign(&ptr, 4096, size) != 0 || !ptr) {
+                  ptr = std::malloc(size);
+              }
+              if (ptr) {
+                  std::memset(ptr, 0, size);
+              }
+              return ptr;
+          }
+
+          bool VirtualMemory::protectRW(void *ptr, size_t size)
+          {
+              return true;
+          }
+
+          bool VirtualMemory::protectRX(void *ptr, size_t size)
+          {
+              return true;
+          }
+
+          void VirtualMemory::flushInstructionCache(void *ptr, size_t size)
+          {
+          }
+
+          bool VirtualMemory::isHugepagesAvailable()
+          {
+              return false;
+          }
+
+          bool VirtualMemory::isOneGbPagesAvailable()
+          {
+              return false;
+          }
+
+          bool VirtualMemory::allocateLargePagesMemory()
+          {
+              return false;
+          }
+
+          bool VirtualMemory::allocateOneGbPagesMemory()
+          {
+              return false;
+          }
+
+          void *VirtualMemory::allocateLargePagesMemory(size_t size)
+          {
+              return nullptr;
+          }
+
+          void *VirtualMemory::allocateOneGbPagesMemory(size_t size)
+          {
+              return nullptr;
+          }
+
+          bool VirtualMemory::adviseLargePages(void *ptr, size_t size)
+          {
+              return false;
+          }
+
+          void VirtualMemory::freeLargePagesMemory(void *ptr, size_t size)
+          {
+              if (ptr) {
+                  std::free(ptr);
+              }
+          }
+
+          void VirtualMemory::freeLargePagesMemory()
+          {
+          }
+
+          void VirtualMemory::osInit(size_t size)
+          {
+          }
+
+          } // namespace xmrig
+
+          extern "C" {
+          int uv_exepath(char* buffer, size_t* size) { if (buffer && size && *size > 0) { buffer[0] = 0; } return 0; }
+          char** uv_setup_args(int argc, char** argv) { return argv; }
+          int uv_interface_addresses(void**, int* count) { if (count) *count = 0; return 0; }
+          void uv_free_interface_addresses(void*, int) {}
+          int uv_resident_set_memory(size_t* rss) { if (rss) *rss = 0; return 0; }
+          uint64_t uv_get_free_memory(void) { return 1073741824ULL; }
+          uint64_t uv_get_total_memory(void) { return 2147483648ULL; }
+          void uv_loadavg(double avg[3]) { if (avg) { avg[0] = avg[1] = avg[2] = 0.0; } }
+          }
+          EOF
 
           rm -rf build
           mkdir build
-
           cd build
 
-          cmake .. \
+          emcmake cmake .. \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI="${{ matrix.abi }}" \
-            -DANDROID_PLATFORM=android-24 \
-            -DANDROID_STL=c++_static \
-            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-            -DCMAKE_THREAD_LIBS_INIT="" \
-            -DCMAKE_HAVE_LIBC_PTHREAD=ON \
+            -DXMRIG_OS_LINUX=ON \
             -DUV_LIBRARY="$UV_LIBRARY" \
             -DUV_INCLUDE_DIR="$UV_INCLUDE_DIR" \
+            -DWITH_ASM=OFF \
+            -DWITH_MSR=OFF \
+            -DWITH_DMI=OFF \
             -DWITH_HWLOC=OFF \
             -DWITH_OPENCL=OFF \
             -DWITH_CUDA=OFF \
-            -DWITH_TLS=OFF
+            -DWITH_TLS=OFF \
+            -DWITH_HTTPD=OFF \
+            -DWITH_GHOSTRIDER=OFF \
+            -DWITH_KAWPOW=OFF \
+            -DWITH_CN_GPU=OFF \
+            -DWITH_ASTROBWT=OFF \
+            -DCMAKE_C_FLAGS="-msimd128 -pthread -D__SSE__ -D__SSE2__" \
+            -DCMAKE_CXX_FLAGS="-msimd128 -pthread -D__SSE__ -D__SSE2__" \
+            -DCMAKE_EXE_LINKER_FLAGS="-s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=4 -s WASM=1 -s INITIAL_MEMORY=256MB -s MAXIMUM_MEMORY=2GB -s ALLOW_MEMORY_GROWTH=1"
 
-      - name: Build XMRig
+      - name: Build XMRig Wasm
         run: |
           cmake --build build --parallel $(nproc)
 
-      - name: Locate xmrig binary
+      - name: Package Wasm Artifacts
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "Searching for xmrig executable..."
-          find build -type f -name "xmrig" -print
+          mkdir -p output_wasm
 
-          LIB="$(find build -type f -name 'xmrig' -print -quit)"
-          test -n "$LIB"
-          file "$LIB"
+          # جمع‌آوری خروجی‌های .wasm و .js
+          find build -type f \( -name "*.wasm" -o -name "*.js" -o -name "*.worker.js" \) -exec cp {} output_wasm/ \;
 
-      - name: Package libxmrig.so
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          mkdir -p "output/${{ matrix.abi }}"
-
-          LIB="$(find build -type f -name 'xmrig' -print -quit)"
-
-          cp "$LIB" "output/${{ matrix.abi }}/libxmrig.so"
-
-          echo "Final output file info:"
-          file "output/${{ matrix.abi }}/libxmrig.so"
-
-          cd output
-          zip -r "../libxmrig-${{ matrix.abi }}.zip" "${{ matrix.abi }}"
+          cd output_wasm
+          zip -r "../xmrig-wasm.zip" .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: libxmrig-${{ matrix.abi }}
-          path: libxmrig-${{ matrix.abi }}.zip
+          name: xmrig-wasm
+          path: xmrig-wasm.zip
           if-no-files-found: error
