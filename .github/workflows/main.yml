@@ -41,7 +41,7 @@ jobs:
           git clone --depth 1 --branch v1.49.2 https://github.com/libuv/libuv.git libuv
           cd libuv
 
-          # فعال‌سازی حلقه رویدادهای زنده POSIX Poll برای WebAssembly در libuv
+          # فعال‌سازی حلقه رویدادهای استاندارد POSIX Poll برای WebAssembly در libuv
           sed -i '1s/^/#if defined(__EMSCRIPTEN__)\n# include "uv\/posix.h"\n#endif\n/' include/uv/unix.h
           sed -i 's/add_library(uv_a STATIC ${uv_sources})/list(APPEND uv_sources src\/unix\/posix-poll.c src\/unix\/posix-hrtime.c src\/unix\/no-fsevents.c src\/unix\/no-proctitle.c)\nadd_library(uv_a STATIC ${uv_sources})/g' CMakeLists.txt
 
@@ -69,28 +69,38 @@ jobs:
           sed -i 's/constexpr const int kDefaultDonateLevel = 1;/constexpr const int kDefaultDonateLevel = 0;/g' src/donate.h
           sed -i 's/constexpr const int kMinimumDonateLevel = 1;/constexpr const int kMinimumDonateLevel = 0;/g' src/donate.h
 
-          # ۲. رفع باگ تغییر نام Target هنگام غیرفعال بودن TLS (-notls) و غیرفعال‌سازی strip
+          # ۲. تنظیم حلقه اجرای Emscripten (حل فریز شدن شبکه در مرورگر)
+          python3 -c "
+          with open('src/App.cpp', 'r') as f:
+              c = f.read()
+          c = c.replace('#include \"App.h\"', '#include \"App.h\"\n#include <emscripten.h>\nstatic void emscripten_uv_loop(void *arg) { uv_run(static_cast<uv_loop_t*>(arg), UV_RUN_NOWAIT); }')
+          c = c.replace('return uv_run(m_uv, UV_RUN_DEFAULT);', 'emscripten_set_main_loop_arg(emscripten_uv_loop, m_uv, 0, 1);\nreturn 0;')
+          with open('src/App.cpp', 'w') as f:
+              f.write(c)
+          "
+
+          # ۳. رفع باگ تغییر نام Target هنگام غیرفعال بودن TLS (-notls) و غیرفعال‌سازی strip
           sed -i 's/-notls//g' CMakeLists.txt cmake/OpenSSL.cmake 2>/dev/null || true
           sed -i 's/COMMAND strip/COMMAND true/g' CMakeLists.txt 2>/dev/null || true
           sed -i 's/COMMAND \${CMAKE_STRIP}/COMMAND true/g' CMakeLists.txt 2>/dev/null || true
 
-          # ۳. حذف تمام پرچم‌های پرپردازنده x86 که در Wasm وجود ندارند
+          # ۴. حذف تمام پرچم‌های پرپردازنده x86 که در Wasm وجود ندارند
           find cmake/ -type f -exec sed -i -E 's/-m(aes|vaes|pclmul)//g' {} +
           sed -i -E 's/-m(aes|vaes|pclmul)//g' CMakeLists.txt 2>/dev/null || true
 
-          # ۴. خنثی‌سازی کدهای x86 Inline Assembly و CPUID
+          # ۵. خنثی‌سازی کدهای x86 Inline Assembly و CPUID
           find src/ -type f -exec sed -i -E 's/# *include *[<"]cpuid\.h[>"]/#define __cpuid(a,b,c,d,e) do { (b)=(c)=(d)=(e)=0; } while(0)\n#define __cpuid_count(a,b,c,d,e,f) do { (c)=(d)=(e)=(f)=0; } while(0)/g' {} +
           sed -i 's/__asm__ __volatile__("xgetbv": "=a"(eax_reg), "=d"(edx_reg) : "c"(0) : "cc");/eax_reg = 0; edx_reg = 0;/g' src/backend/cpu/platform/BasicCpuInfo.cpp
 
-          # ۵. جایگزینی x86intrin.h با emmintrin.h و مپ کردن Soft AES برای CryptoNight
+          # ۶. جایگزینی x86intrin.h با emmintrin.h و مپ کردن Soft AES برای CryptoNight
           find src/ -type f -exec sed -i -E 's/# *include *[<"](x86intrin|ia32intrin)\.h[>"]/#include <emmintrin.h>/g' {} +
           sed -i '1s/^/#define _mm_aesenc_si128 soft_aesenc\n#define _mm_aeskeygenassist_si128(a,b) soft_aeskeygenassist<b>(a)\n/' src/crypto/cn/CryptoNight_x86.h
 
-          # ۶. خنثی‌سازی کامل تمام دستورات _mm_setcsr در RandomX
+          # ۷. خنثی‌سازی کامل تمام دستورات _mm_setcsr در RandomX
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
 
-          # ۷. پیاده‌سازی متدهای دقیق و سازگار با WebAssembly در Platform_unix.cpp
+          # ۸. پیاده‌سازی متدهای Platform برای WebAssembly
           cat << 'EOF' > src/base/kernel/Platform_unix.cpp
           #include "base/kernel/Platform.h"
           #include <cstdint>
@@ -129,7 +139,7 @@ jobs:
           } // namespace xmrig
           EOF
 
-          # ۸. پیاده‌سازی متدهای دقیق VirtualMemory و توابع داخلی libuv برای WebAssembly
+          # ۹. پیاده‌سازی متدهای VirtualMemory برای WebAssembly
           cat << 'EOF' > src/crypto/common/VirtualMemory_unix.cpp
           #include "crypto/common/VirtualMemory.h"
           #include <cstdlib>
