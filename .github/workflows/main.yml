@@ -206,9 +206,8 @@ jobs:
               }
           }
 
-          bool VirtualMemory::freeLargePagesMemory()
+          void VirtualMemory::freeLargePagesMemory()
           {
-              return true;
           }
 
           void VirtualMemory::osInit(size_t size)
