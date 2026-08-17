@@ -41,7 +41,7 @@ jobs:
           git clone --depth 1 --branch v1.49.2 https://github.com/libuv/libuv.git libuv
           cd libuv
 
-          # فعال‌سازی حلقه رویدادهای استاندارد POSIX Poll برای WebAssembly در libuv
+          # فعال‌سازی حلقه رویدادهای زنده POSIX Poll برای WebAssembly در libuv
           sed -i '1s/^/#if defined(__EMSCRIPTEN__)\n# include "uv\/posix.h"\n#endif\n/' include/uv/unix.h
           sed -i 's/add_library(uv_a STATIC ${uv_sources})/list(APPEND uv_sources src\/unix\/posix-poll.c src\/unix\/posix-hrtime.c src\/unix\/no-fsevents.c src\/unix\/no-proctitle.c)\nadd_library(uv_a STATIC ${uv_sources})/g' CMakeLists.txt
 
@@ -90,7 +90,7 @@ jobs:
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_setcsr.*;/(void)0;/g' {} +
           find src/crypto/randomx/ -type f -exec sed -i 's/_mm_getcsr.*/0;/g' {} +
 
-          # ۷. پیاده‌سازی متدهای تمیز Platform برای WebAssembly
+          # ۷. پیاده‌سازی متدهای دقیق و سازگار با WebAssembly در Platform_unix.cpp
           cat << 'EOF' > src/base/kernel/Platform_unix.cpp
           #include "base/kernel/Platform.h"
           #include <cstdint>
@@ -129,7 +129,7 @@ jobs:
           } // namespace xmrig
           EOF
 
-          # ۸. پیاده‌سازی متدهای VirtualMemory برای WebAssembly
+          # ۸. پیاده‌سازی متدهای دقیق VirtualMemory و توابع داخلی libuv برای WebAssembly
           cat << 'EOF' > src/crypto/common/VirtualMemory_unix.cpp
           #include "crypto/common/VirtualMemory.h"
           #include <cstdlib>
